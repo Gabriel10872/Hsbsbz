@@ -3,13 +3,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local hrp = char:WaitForChild("HumanoidRootPart")
 local playerGui = player:WaitForChild("PlayerGui")
 
-local spawnPos = hrp.Position
-
--- GUI Setup (usando seu último visual top)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "UltraModernSteal"
 screenGui.ResetOnSpawn = false
@@ -97,13 +92,6 @@ local buttonStroke = Instance.new("UIStroke", button)
 buttonStroke.Color = Color3.fromRGB(255, 255, 255)
 buttonStroke.Thickness = 1
 
-button.MouseEnter:Connect(function()
-	TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 200, 255)}):Play()
-end)
-button.MouseLeave:Connect(function()
-	TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 170, 255)}):Play()
-end)
-
 local teleporting = false
 local cancelRequested = false
 local stayTimer = 0
@@ -132,17 +120,28 @@ local function disconnectHeartbeat()
 	end
 end
 
+local function getCharacterAndHRP()
+	local character = player.Character or player.CharacterAdded:Wait()
+	local hrp = character:WaitForChild("HumanoidRootPart")
+	return character, hrp
+end
+
 local function teleportLoop()
+	if teleporting then return end -- evita multi start
+
 	teleporting = true
 	cancelRequested = false
 	stayTimer = 0
 	attempts = 0
-	setProgress(0)
+	resetProgress()
 	updateStatus("Teleportando...")
 	button.Text = "Cancel"
 	button.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
 
-	-- Start teleport above
+	local character, hrp = getCharacterAndHRP()
+	local spawnPos = hrp.Position
+
+	-- Começa teleportando acima
 	hrp.CFrame = CFrame.new(spawnPos + Vector3.new(0, 5, 0))
 
 	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
@@ -157,12 +156,12 @@ local function teleportLoop()
 		end
 
 		if not hrp or not hrp.Parent then
-			disconnectHeartbeat()
-			teleporting = false
-			resetProgress()
-			updateStatus("Personagem não encontrado.")
-			button.Text = "Steal"
-			button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+			-- Atualiza a referência se personagem morrer/resetar
+			character, hrp = getCharacterAndHRP()
+			spawnPos = hrp.Position
+			hrp.CFrame = CFrame.new(spawnPos + Vector3.new(0, 5, 0))
+			stayTimer = 0
+			attempts = 0
 			return
 		end
 
@@ -189,7 +188,6 @@ local function teleportLoop()
 		else
 			stayTimer = 0
 			if attempts < maxAttempts then
-				-- Descendo pouco a pouco para evitar "teleporte brusco"
 				local newY = math.max(pos.Y - 0.5, spawnPos.Y)
 				hrp.CFrame = CFrame.new(Vector3.new(spawnPos.X, newY, spawnPos.Z))
 				attempts += 1
