@@ -4,63 +4,69 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
-
--- Posição de onde nasceu
 local spawnPos = hrp.Position
 
--- GUI moderna
+-- GUI Moderna
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "TPGui"
-gui.ResetOnSpawn = false
+gui.Name = "SmoothFlyGUI"
 
 local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 160, 0, 50)
-button.Position = UDim2.new(0.5, -80, 0.7, 0)
-button.AnchorPoint = Vector2.new(0.5, 0.5)
-button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.Size = UDim2.new(0, 170, 0, 55)
+button.Position = UDim2.new(0.5, -85, 0.8, 0)
+button.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextSize = 22
 button.Font = Enum.Font.GothamBold
-button.TextSize = 20
 button.Text = "Steal"
+button.AutoButtonColor = true
 button.Parent = gui
 
--- Estados
+-- Função de voo ultra suave
 local flying = false
-local connection = nil
-local bodyVelocity = nil
+local connection
+local bv, bg
 
--- Função que inicia voo suave até o ponto
-local function startFlyingTo(targetPos)
-	if bodyVelocity then bodyVelocity:Destroy() end
+local function startSmoothFlyTo(pos)
+	if bv then bv:Destroy() end
+	if bg then bg:Destroy() end
 
-	bodyVelocity = Instance.new("BodyVelocity")
-	bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-	bodyVelocity.P = 15000
-	bodyVelocity.Velocity = Vector3.zero
-	bodyVelocity.Parent = hrp
+	bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+	bv.Velocity = Vector3.zero
+	bv.P = 3000
+	bv.Parent = hrp
 
-	local timeInPlace = 0
+	bg = Instance.new("BodyGyro")
+	bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+	bg.CFrame = hrp.CFrame
+	bg.P = 3000
+	bg.Parent = hrp
+
+	local timeStill = 0
 
 	connection = RunService.Heartbeat:Connect(function(dt)
 		if not flying then return end
 
-		local currentPos = hrp.Position
-		local distance = (targetPos - currentPos)
+		local target = pos + Vector3.new(0, 5, 0) -- Fica acima e desce
+		local direction = (target - hrp.Position)
+		local distance = direction.Magnitude
 
-		-- Aponta suavemente na direção e reduz velocidade ao chegar
-		bodyVelocity.Velocity = distance.Unit * math.clamp(distance.Magnitude * 1.5, 5, 50)
-
-		-- Detecta se chegou e ficou por 2 segundos
-		if distance.Magnitude <= 2 then
-			timeInPlace += dt
-			if timeInPlace >= 2 then
-				flying = false
-				button.Text = "Steal"
-				if connection then connection:Disconnect() end
-				if bodyVelocity then bodyVelocity:Destroy() end
-			end
+		-- Suavização da direção
+		if distance > 1 then
+			local speed = math.clamp(distance * 2, 10, 60)
+			bv.Velocity = direction.Unit * speed
+			bg.CFrame = CFrame.new(hrp.Position, target)
+			timeStill = 0
 		else
-			timeInPlace = 0
+			timeStill += dt
+			bv.Velocity = Vector3.zero
+			if timeStill >= 2 then
+				button.Text = "Steal"
+				flying = false
+				if connection then connection:Disconnect() end
+				if bv then bv:Destroy() end
+				if bg then bg:Destroy() end
+			end
 		end
 	end)
 end
@@ -71,10 +77,11 @@ button.MouseButton1Click:Connect(function()
 		flying = false
 		button.Text = "Steal"
 		if connection then connection:Disconnect() end
-		if bodyVelocity then bodyVelocity:Destroy() end
+		if bv then bv:Destroy() end
+		if bg then bg:Destroy() end
 	else
 		flying = true
 		button.Text = "Cancel"
-		startFlyingTo(spawnPos + Vector3.new(0, 5, 0)) -- Vai 5 studs acima e desce suavemente
+		startSmoothFlyTo(spawnPos)
 	end
 end)
