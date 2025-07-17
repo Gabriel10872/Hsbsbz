@@ -8,7 +8,6 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 
 local spawnPos = hrp.Position + Vector3.new(0, 10, 0)
 
--- GUI
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 gui.Name = "UltraSmoothFlyGui"
 gui.ResetOnSpawn = false
@@ -59,7 +58,6 @@ progressBar.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
 progressBar.BorderSizePixel = 0
 progressBar.ZIndex = 3
 
--- Aligns para voo suave
 local a0 = Instance.new("Attachment", hrp)
 
 local alignPos = Instance.new("AlignPosition")
@@ -83,12 +81,25 @@ alignOri.Parent = hrp
 local flying = false
 local cancel = false
 
-local function noclip(state)
+local function setCanCollide(state)
+	-- Função pra setar CanCollide false em tudo do personagem e acessórios
 	for _, part in pairs(char:GetDescendants()) do
-		if part:IsA("BasePart") and part.CanCollide ~= nil then
-			part.CanCollide = not state
+		if part:IsA("BasePart") then
+			part.CanCollide = state
 		end
 	end
+end
+
+local function maintainNoclip()
+	-- Loop rápido que mantém CanCollide false enquanto voa
+	return RunService.Heartbeat:Connect(function()
+		if not flying then return end
+		for _, part in pairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide == true then
+				part.CanCollide = false
+			end
+		end
+	end)
 end
 
 local function tweenProgress(duration)
@@ -114,20 +125,21 @@ button.MouseButton1Click:Connect(function()
 	cancel = false
 	button.Text = "Cancel"
 
-	noclip(true)
+	setCanCollide(false)
 	alignPos.Position = spawnPos
 	alignPos.Enabled = true
 	alignOri.Enabled = true
+
+	local heartbeatConn = maintainNoclip()
 
 	local arrived = false
 	local timer = 0
 	local lastTick = tick()
 
-	local heartbeatConn
 	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
 		if cancel then
 			flying = false
-			noclip(false)
+			setCanCollide(true)
 			alignPos.Enabled = false
 			alignOri.Enabled = false
 			heartbeatConn:Disconnect()
@@ -158,7 +170,7 @@ button.MouseButton1Click:Connect(function()
 	alignPos.Position = spawnPos + Vector3.new(0, 0.1, 0)
 	tweenProgress(6)
 
-	noclip(false)
+	setCanCollide(true)
 	alignPos.Enabled = false
 	alignOri.Enabled = false
 	button.Text = "Steal"
