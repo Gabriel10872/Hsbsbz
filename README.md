@@ -83,6 +83,14 @@ alignOri.Parent = hrp
 local flying = false
 local cancel = false
 
+local function noclip(state)
+	for _, part in pairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.CanCollide ~= nil then
+			part.CanCollide = not state
+		end
+	end
+end
+
 local function tweenProgress(duration)
 	progressBarBack.Visible = true
 	progressBar.Size = UDim2.new(0, 0, 1, 0)
@@ -105,20 +113,21 @@ button.MouseButton1Click:Connect(function()
 	flying = true
 	cancel = false
 	button.Text = "Cancel"
+
+	noclip(true)
 	alignPos.Position = spawnPos
 	alignPos.Enabled = true
 	alignOri.Enabled = true
 
-	-- Move suavemente até posição + 10 studs no ar
 	local arrived = false
 	local timer = 0
 	local lastTick = tick()
 
-	-- Loop do voo
 	local heartbeatConn
 	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
 		if cancel then
 			flying = false
+			noclip(false)
 			alignPos.Enabled = false
 			alignOri.Enabled = false
 			heartbeatConn:Disconnect()
@@ -140,17 +149,16 @@ button.MouseButton1Click:Connect(function()
 		lastTick = tick()
 	end)
 
-	-- Espera o voo até chegar
 	while not arrived and not cancel do
 		task.wait()
 	end
 
 	if cancel then return end
 
-	-- Congela no ar por 6 segundos, mostrando barra
 	alignPos.Position = spawnPos + Vector3.new(0, 0.1, 0)
 	tweenProgress(6)
 
+	noclip(false)
 	alignPos.Enabled = false
 	alignOri.Enabled = false
 	button.Text = "Steal"
