@@ -1,87 +1,83 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
-local spawnPos = hrp.Position
 
--- GUI Moderna
+-- Salvar posição inicial levemente acima
+local originalPos = hrp.Position + Vector3.new(0, 10, 0)
+
+-- Criar GUI
 local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "SmoothFlyGUI"
+gui.Name = "StealGui"
 
 local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 170, 0, 55)
-button.Position = UDim2.new(0.5, -85, 0.8, 0)
-button.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+button.Size = UDim2.new(0, 160, 0, 50)
+button.Position = UDim2.new(0.5, -80, 0.8, 0)
+button.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 button.TextColor3 = Color3.new(1, 1, 1)
-button.TextSize = 22
 button.Font = Enum.Font.GothamBold
+button.TextSize = 20
 button.Text = "Steal"
-button.AutoButtonColor = true
 button.Parent = gui
 
--- Função de voo ultra suave
+-- Criação de attachments e aligners
+local a0 = Instance.new("Attachment", hrp)
+
+local alignPos = Instance.new("AlignPosition")
+alignPos.Attachment0 = a0
+alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+alignPos.Responsiveness = 200
+alignPos.MaxForce = 500000
+alignPos.RigidityEnabled = false
+alignPos.Enabled = false
+alignPos.Parent = hrp
+
+local alignOri = Instance.new("AlignOrientation")
+alignOri.Attachment0 = a0
+alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+alignOri.Responsiveness = 50
+alignOri.MaxTorque = 500000
+alignOri.RigidityEnabled = false
+alignOri.Enabled = false
+alignOri.Parent = hrp
+
+-- Função de voo até posição
 local flying = false
-local connection
-local bv, bg
+local cancel = false
 
-local function startSmoothFlyTo(pos)
-	if bv then bv:Destroy() end
-	if bg then bg:Destroy() end
+button.MouseButton1Click:Connect(function()
+	if not flying then
+		button.Text = "Cancel"
+		alignPos.Position = originalPos
+		alignPos.Enabled = true
+		alignOri.Enabled = true
+		flying = true
+		cancel = false
 
-	bv = Instance.new("BodyVelocity")
-	bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-	bv.Velocity = Vector3.zero
-	bv.P = 3000
-	bv.Parent = hrp
+		local stayTime = 0
+		local lastCheck = tick()
 
-	bg = Instance.new("BodyGyro")
-	bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-	bg.CFrame = hrp.CFrame
-	bg.P = 3000
-	bg.Parent = hrp
+		while flying and not cancel do
+			wait(0.1)
+			local dist = (hrp.Position - originalPos).Magnitude
+			if dist < 3 then
+				stayTime += tick() - lastCheck
+			else
+				stayTime = 0
+			end
+			lastCheck = tick()
 
-	local timeStill = 0
-
-	connection = RunService.Heartbeat:Connect(function(dt)
-		if not flying then return end
-
-		local target = pos + Vector3.new(0, 5, 0) -- Fica acima e desce
-		local direction = (target - hrp.Position)
-		local distance = direction.Magnitude
-
-		-- Suavização da direção
-		if distance > 1 then
-			local speed = math.clamp(distance * 2, 10, 60)
-			bv.Velocity = direction.Unit * speed
-			bg.CFrame = CFrame.new(hrp.Position, target)
-			timeStill = 0
-		else
-			timeStill += dt
-			bv.Velocity = Vector3.zero
-			if timeStill >= 2 then
-				button.Text = "Steal"
-				flying = false
-				if connection then connection:Disconnect() end
-				if bv then bv:Destroy() end
-				if bg then bg:Destroy() end
+			if stayTime >= 2 then
+				break
 			end
 		end
-	end)
-end
 
--- Botão
-button.MouseButton1Click:Connect(function()
-	if flying then
+		alignPos.Enabled = false
+		alignOri.Enabled = false
 		flying = false
 		button.Text = "Steal"
-		if connection then connection:Disconnect() end
-		if bv then bv:Destroy() end
-		if bg then bg:Destroy() end
 	else
-		flying = true
-		button.Text = "Cancel"
-		startSmoothFlyTo(spawnPos)
+		cancel = true
+		button.Text = "Steal"
 	end
 end)
