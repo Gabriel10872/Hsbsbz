@@ -1,218 +1,87 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local char = player.Character or player.CharacterAdded:Wait()
+local humRoot = char:WaitForChild("HumanoidRootPart")
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "UltraModernSteal"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = playerGui
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+gui.Name = "TeleportGui"
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 280, 0, 120)
-frame.Position = UDim2.new(0.5, -140, 0.75, 0)
-frame.BackgroundColor3 = Color3.fromRGB(28, 28, 30)
-frame.BorderSizePixel = 0
-frame.AnchorPoint = Vector2.new(0.5, 0.5)
-frame.ClipsDescendants = true
-frame.Active = true
-frame.Draggable = true
-frame.Parent = screenGui
-
-local corner = Instance.new("UICorner", frame)
-corner.CornerRadius = UDim.new(0, 16)
-
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(0, 170, 255)
-stroke.Thickness = 3
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 30)
-title.Position = UDim2.new(0, 10, 0, 10)
-title.BackgroundTransparency = 1
-title.Text = "Steal Teleport"
-title.TextColor3 = Color3.fromRGB(0, 170, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 24
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = frame
-
-local statusText = Instance.new("TextLabel")
-statusText.Size = UDim2.new(1, -20, 0, 20)
-statusText.Position = UDim2.new(0, 10, 0, 45)
-statusText.BackgroundTransparency = 1
-statusText.Text = "Clique em Steal para começar"
-statusText.TextColor3 = Color3.fromRGB(180, 180, 180)
-statusText.Font = Enum.Font.Gotham
-statusText.TextSize = 16
-statusText.TextXAlignment = Enum.TextXAlignment.Left
-statusText.Parent = frame
-
-local loadingFrame = Instance.new("Frame")
-loadingFrame.Size = UDim2.new(0, 48, 0, 48)
-loadingFrame.Position = UDim2.new(1, -60, 0.5, -24)
-loadingFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-loadingFrame.AnchorPoint = Vector2.new(0, 0.5)
-loadingFrame.Parent = frame
-
-local loadingCorner = Instance.new("UICorner", loadingFrame)
-loadingCorner.CornerRadius = UDim.new(1, 0)
-
-local loadingStroke = Instance.new("UIStroke", loadingFrame)
-loadingStroke.Color = Color3.fromRGB(0, 170, 255)
-loadingStroke.Thickness = 2
-
-local arc = Instance.new("Frame")
-arc.Size = UDim2.new(1, 0, 1, 0)
-arc.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-arc.AnchorPoint = Vector2.new(0.5, 0.5)
-arc.Position = UDim2.new(0.5, 0, 0.5, 0)
-arc.Parent = loadingFrame
-
-local arcCorner = Instance.new("UICorner", arc)
-arcCorner.CornerRadius = UDim.new(1, 0)
-
+-- Botão estilizado
 local button = Instance.new("TextButton")
-button.Size = UDim2.new(1, -20, 0, 50)
-button.Position = UDim2.new(0, 10, 1, -60)
-button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+button.Size = UDim2.new(0, 150, 0, 50)
+button.Position = UDim2.new(0.5, -75, 0.7, 0)
+button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+button.BorderSizePixel = 0
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
 button.Font = Enum.Font.GothamBold
-button.TextSize = 22
-button.TextColor3 = Color3.new(1,1,1)
+button.TextSize = 20
 button.Text = "Steal"
 button.AutoButtonColor = false
-button.Parent = frame
+button.Parent = gui
+button.BackgroundTransparency = 0.2
+button.ZIndex = 2
+button.ClipsDescendants = true
+button.AnchorPoint = Vector2.new(0.5, 0.5)
+button.Visible = false
 
-local buttonCorner = Instance.new("UICorner", button)
-buttonCorner.CornerRadius = UDim.new(0, 12)
+-- Animação de fade in
+local tween = TweenService:Create(button, TweenInfo.new(0.5), {BackgroundTransparency = 0})
+wait(0.5)
+button.Visible = true
+tween:Play()
 
-local buttonStroke = Instance.new("UIStroke", button)
-buttonStroke.Color = Color3.fromRGB(255, 255, 255)
-buttonStroke.Thickness = 1
-
-local teleporting = false
-local cancelRequested = false
-local stayTimer = 0
-local maxStayTime = 2
+-- Salvando posição de spawn
+local spawnPosition = humRoot.Position
+local trying = false
+local stayTime = 0
 local maxAttempts = 30
 local attempts = 0
 local heartbeatConn
 
-local function setProgress(progress)
-	progress = math.clamp(progress, 0, 1)
-	arc.Size = UDim2.new(progress, 0, 1, 0)
-end
-
-local function resetProgress()
-	setProgress(0)
-end
-
-local function updateStatus(text)
-	statusText.Text = text
-end
-
-local function disconnectHeartbeat()
-	if heartbeatConn then
-		heartbeatConn:Disconnect()
-		heartbeatConn = nil
-	end
-end
-
-local function getCharacterAndHRP()
-	local character = player.Character or player.CharacterAdded:Wait()
-	local hrp = character:WaitForChild("HumanoidRootPart")
-	return character, hrp
-end
-
 local function teleportLoop()
-	if teleporting then return end -- evita multi start
-
-	teleporting = true
-	cancelRequested = false
-	stayTimer = 0
+	if heartbeatConn then heartbeatConn:Disconnect() end
 	attempts = 0
-	resetProgress()
-	updateStatus("Teleportando...")
-	button.Text = "Cancel"
-	button.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-
-	local character, hrp = getCharacterAndHRP()
-	local spawnPos = hrp.Position
-
-	-- Começa teleportando acima
-	hrp.CFrame = CFrame.new(spawnPos + Vector3.new(0, 5, 0))
+	stayTime = 0
 
 	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
-		if cancelRequested then
-			disconnectHeartbeat()
-			teleporting = false
-			resetProgress()
-			updateStatus("Teleportação cancelada.")
-			button.Text = "Steal"
-			button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-			return
-		end
+		if not trying then return end
 
-		if not hrp or not hrp.Parent then
-			-- Atualiza a referência se personagem morrer/resetar
-			character, hrp = getCharacterAndHRP()
-			spawnPos = hrp.Position
-			hrp.CFrame = CFrame.new(spawnPos + Vector3.new(0, 5, 0))
-			stayTimer = 0
-			attempts = 0
-			return
-		end
+		local currentPos = humRoot.Position
+		local horizontalDist = (Vector3.new(currentPos.X, 0, currentPos.Z) - Vector3.new(spawnPosition.X, 0, spawnPosition.Z)).Magnitude
+		local verticalDist = math.abs(currentPos.Y - spawnPosition.Y)
 
-		local pos = hrp.Position
-		local horizontalDist = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
-		local verticalDist = pos.Y - spawnPos.Y
-
-		if horizontalDist <= 2 and math.abs(verticalDist) <= 2 then
-			stayTimer += dt
-			updateStatus(string.format("Parado %.1f/%.1f segundos", stayTimer, maxStayTime))
-			setProgress(stayTimer / maxStayTime)
-			if stayTimer >= maxStayTime then
-				disconnectHeartbeat()
-				teleporting = false
-				updateStatus("Teleportação concluída!")
-				button.Text = "Done!"
-				button.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
-				task.wait(2)
-				resetProgress()
-				updateStatus("Clique em Steal para começar")
+		if horizontalDist <= 2 and verticalDist <= 2 then
+			stayTime += dt
+			if stayTime >= 2 then
+				trying = false
 				button.Text = "Steal"
-				button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+				heartbeatConn:Disconnect()
 			end
 		else
-			stayTimer = 0
+			stayTime = 0
 			if attempts < maxAttempts then
-				local newY = math.max(pos.Y - 0.5, spawnPos.Y)
-				hrp.CFrame = CFrame.new(Vector3.new(spawnPos.X, newY, spawnPos.Z))
+				humRoot.CFrame = CFrame.new(spawnPosition + Vector3.new(0, 5, 0))
 				attempts += 1
-				updateStatus(string.format("Descendo... tentativa %d/%d", attempts, maxAttempts))
-				setProgress(attempts / maxAttempts)
 			else
-				disconnectHeartbeat()
-				teleporting = false
-				updateStatus("Falha ao teleportar.")
-				button.Text = "Failed"
-				button.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-				task.wait(2)
-				resetProgress()
-				updateStatus("Clique em Steal para começar")
+				trying = false
 				button.Text = "Steal"
-				button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+				heartbeatConn:Disconnect()
 			end
 		end
 	end)
 end
 
 button.MouseButton1Click:Connect(function()
-	if teleporting then
-		cancelRequested = true
-	else
+	if not trying then
+		trying = true
+		button.Text = "Cancel"
 		teleportLoop()
+	else
+		trying = false
+		button.Text = "Steal"
+		if heartbeatConn then heartbeatConn:Disconnect() end
 	end
 end)
