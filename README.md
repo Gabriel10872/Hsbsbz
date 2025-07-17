@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
@@ -10,7 +9,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local spawnPos = hrp.Position
 
--- === Create GUI ===
+-- GUI Setup (usando seu último visual top)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "UltraModernSteal"
 screenGui.ResetOnSpawn = false
@@ -34,7 +33,6 @@ local stroke = Instance.new("UIStroke", frame)
 stroke.Color = Color3.fromRGB(0, 170, 255)
 stroke.Thickness = 3
 
--- Title Text
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -20, 0, 30)
 title.Position = UDim2.new(0, 10, 0, 10)
@@ -46,7 +44,6 @@ title.TextSize = 24
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
--- Status Text
 local statusText = Instance.new("TextLabel")
 statusText.Size = UDim2.new(1, -20, 0, 20)
 statusText.Position = UDim2.new(0, 10, 0, 45)
@@ -58,7 +55,6 @@ statusText.TextSize = 16
 statusText.TextXAlignment = Enum.TextXAlignment.Left
 statusText.Parent = frame
 
--- Circular Loading Frame
 local loadingFrame = Instance.new("Frame")
 loadingFrame.Size = UDim2.new(0, 48, 0, 48)
 loadingFrame.Position = UDim2.new(1, -60, 0.5, -24)
@@ -73,7 +69,6 @@ local loadingStroke = Instance.new("UIStroke", loadingFrame)
 loadingStroke.Color = Color3.fromRGB(0, 170, 255)
 loadingStroke.Thickness = 2
 
--- Progress Arc Setup
 local arc = Instance.new("Frame")
 arc.Size = UDim2.new(1, 0, 1, 0)
 arc.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
@@ -84,7 +79,6 @@ arc.Parent = loadingFrame
 local arcCorner = Instance.new("UICorner", arc)
 arcCorner.CornerRadius = UDim.new(1, 0)
 
--- Button
 local button = Instance.new("TextButton")
 button.Size = UDim2.new(1, -20, 0, 50)
 button.Position = UDim2.new(0, 10, 1, -60)
@@ -103,7 +97,6 @@ local buttonStroke = Instance.new("UIStroke", button)
 buttonStroke.Color = Color3.fromRGB(255, 255, 255)
 buttonStroke.Thickness = 1
 
--- Button hover effect
 button.MouseEnter:Connect(function()
 	TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 200, 255)}):Play()
 end)
@@ -119,7 +112,6 @@ local maxAttempts = 30
 local attempts = 0
 local heartbeatConn
 
--- Function to update arc width (simulate progress bar)
 local function setProgress(progress)
 	progress = math.clamp(progress, 0, 1)
 	arc.Size = UDim2.new(progress, 0, 1, 0)
@@ -140,29 +132,18 @@ local function disconnectHeartbeat()
 	end
 end
 
-local function setButtonState(state)
-	if state == "steal" then
-		button.Text = "Steal"
-		button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-	elseif state == "cancel" then
-		button.Text = "Cancel"
-		button.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-	elseif state == "done" then
-		button.Text = "Done!"
-		button.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
-	elseif state == "failed" then
-		button.Text = "Failed"
-		button.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-	end
-end
-
 local function teleportLoop()
 	teleporting = true
 	cancelRequested = false
 	stayTimer = 0
 	attempts = 0
-	setButtonState("cancel")
+	setProgress(0)
 	updateStatus("Teleportando...")
+	button.Text = "Cancel"
+	button.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+
+	-- Start teleport above
+	hrp.CFrame = CFrame.new(spawnPos + Vector3.new(0, 5, 0))
 
 	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
 		if cancelRequested then
@@ -170,7 +151,8 @@ local function teleportLoop()
 			teleporting = false
 			resetProgress()
 			updateStatus("Teleportação cancelada.")
-			setButtonState("steal")
+			button.Text = "Steal"
+			button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 			return
 		end
 
@@ -179,17 +161,16 @@ local function teleportLoop()
 			teleporting = false
 			resetProgress()
 			updateStatus("Personagem não encontrado.")
-			setButtonState("failed")
-			task.wait(2)
-			setButtonState("steal")
+			button.Text = "Steal"
+			button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 			return
 		end
 
 		local pos = hrp.Position
-		local horizontalDist = (Vector3.new(pos.X,0,pos.Z) - Vector3.new(spawnPos.X,0,spawnPos.Z)).Magnitude
-		local verticalDist = math.abs(pos.Y - spawnPos.Y)
+		local horizontalDist = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(spawnPos.X, 0, spawnPos.Z)).Magnitude
+		local verticalDist = pos.Y - spawnPos.Y
 
-		if horizontalDist <= 2 and verticalDist <= 2 then
+		if horizontalDist <= 2 and math.abs(verticalDist) <= 2 then
 			stayTimer += dt
 			updateStatus(string.format("Parado %.1f/%.1f segundos", stayTimer, maxStayTime))
 			setProgress(stayTimer / maxStayTime)
@@ -197,28 +178,34 @@ local function teleportLoop()
 				disconnectHeartbeat()
 				teleporting = false
 				updateStatus("Teleportação concluída!")
-				setButtonState("done")
+				button.Text = "Done!"
+				button.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
 				task.wait(2)
 				resetProgress()
 				updateStatus("Clique em Steal para começar")
-				setButtonState("steal")
+				button.Text = "Steal"
+				button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 			end
 		else
 			stayTimer = 0
 			if attempts < maxAttempts then
-				hrp.CFrame = CFrame.new(spawnPos + Vector3.new(0, 5, 0))
+				-- Descendo pouco a pouco para evitar "teleporte brusco"
+				local newY = math.max(pos.Y - 0.5, spawnPos.Y)
+				hrp.CFrame = CFrame.new(Vector3.new(spawnPos.X, newY, spawnPos.Z))
 				attempts += 1
-				updateStatus(string.format("Tentativa %d/%d: Descendo...", attempts, maxAttempts))
+				updateStatus(string.format("Descendo... tentativa %d/%d", attempts, maxAttempts))
 				setProgress(attempts / maxAttempts)
 			else
 				disconnectHeartbeat()
 				teleporting = false
 				updateStatus("Falha ao teleportar.")
-				setButtonState("failed")
+				button.Text = "Failed"
+				button.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 				task.wait(2)
 				resetProgress()
 				updateStatus("Clique em Steal para começar")
-				setButtonState("steal")
+				button.Text = "Steal"
+				button.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 			end
 		end
 	end)
