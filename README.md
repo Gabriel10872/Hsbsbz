@@ -1,125 +1,107 @@
--- Gui principal
-local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-ScreenGui.Name = "FlyBackGui"
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
-local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 200, 0, 60)
-Frame.Position = UDim2.new(0.5, -100, 0.2, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Frame.BorderSizePixel = 0
-Frame.BackgroundTransparency = 0.1
-Frame.Active = true
-Frame.Draggable = true
-Frame.AnchorPoint = Vector2.new(0.5, 0)
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
 
-local UICorner = Instance.new("UICorner", Frame)
-UICorner.CornerRadius = UDim.new(0, 12)
+-- NoClip
+RunService.Stepped:Connect(function()
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+        end
+    end
+end)
 
-local Button = Instance.new("TextButton", Frame)
-Button.Size = UDim2.new(1, 0, 1, 0)
-Button.Text = "Steal"
-Button.Font = Enum.Font.GothamBold
-Button.TextSize = 22
-Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-Button.BorderSizePixel = 0
-
-local UIStroke = Instance.new("UIStroke", Frame)
-UIStroke.Thickness = 2
-UIStroke.Color = Color3.fromRGB(255, 255, 255)
-UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-local UICornerBtn = Instance.new("UICorner", Button)
-UICornerBtn.CornerRadius = UDim.new(0, 12)
-
--- Lógica
-local Player = game.Players.LocalPlayer
-local InitialPos = nil
-local Teleporting = false
-
--- Força os ProximityPrompts a terem holdDuration 0
+-- ProximityPrompt Auto Hold
 for _, p in ipairs(workspace:GetDescendants()) do
-	if p:IsA("ProximityPrompt") then
-		p.HoldDuration = 0
-	end
+    if p:IsA("ProximityPrompt") then
+        p.HoldDuration = 0
+    end
 end
 
--- Desativa colisão pra atravessar tudo
-local function disableCollision(char)
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = false
-			part.Massless = true
-		end
-	end
+-- Save initial spawn position (slightly above ground)
+local spawnPos = hrp.Position + Vector3.new(0, 5, 0)
+
+-- GUI
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "StealGUI"
+
+local main = Instance.new("Frame", gui)
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.Position = UDim2.new(0.5, 0, 0.6, 0)
+main.Size = UDim2.new(0, 180, 0, 65)
+main.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+main.BorderSizePixel = 0
+main.BackgroundTransparency = 0.1
+main.ClipsDescendants = true
+main.Active = true
+main.Draggable = true
+main.UICorner = Instance.new("UICorner", main)
+main.UICorner.CornerRadius = UDim.new(0, 12)
+
+local btn = Instance.new("TextButton", main)
+btn.Size = UDim2.new(1, -20, 1, -20)
+btn.Position = UDim2.new(0, 10, 0, 10)
+btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+btn.Font = Enum.Font.GothamBold
+btn.TextSize = 16
+btn.Text = "Steal"
+btn.UICorner = Instance.new("UICorner", btn)
+btn.UICorner.CornerRadius = UDim.new(0, 8)
+
+-- Control flags
+local isStealing = false
+local teleportAttempts = 0
+local MAX_ATTEMPTS = 30
+
+local function attemptTeleport()
+    local startTime = tick()
+    local lastInZone = tick()
+    local checking = true
+
+    while checking and teleportAttempts < MAX_ATTEMPTS do
+        teleportAttempts += 1
+
+        local tween = TweenService:Create(hrp, TweenInfo.new(0.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            CFrame = CFrame.new(spawnPos)
+        })
+        tween:Play()
+
+        -- Verifica permanência
+        local staying = true
+        local stayStart = tick()
+
+        while staying do
+            RunService.RenderStepped:Wait()
+            local dist = (hrp.Position - spawnPos).Magnitude
+            if dist > 5 then
+                stayStart = tick() -- Reset se saiu da posição
+            elseif tick() - stayStart >= 2 then
+                checking = false
+                staying = false
+                break
+            end
+        end
+
+        task.wait(0.8)
+    end
+
+    btn.Text = "Steal"
+    isStealing = false
 end
 
--- Voo suave até a posição
-local function flyTo(position)
-	local char = Player.Character
-	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-	disableCollision(char)
-
-	local hrp = char.HumanoidRootPart
-	local flying = true
-	local BodyGyro = Instance.new("BodyGyro", hrp)
-	BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-	BodyGyro.P = 100000
-	BodyGyro.CFrame = hrp.CFrame
-
-	local BodyVelocity = Instance.new("BodyVelocity", hrp)
-	BodyVelocity.Velocity = Vector3.zero
-	BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-
-	local arrivedTime = 0
-
-	while flying and Teleporting do
-		task.wait(0.03)
-		if not char or not char:FindFirstChild("HumanoidRootPart") then break end
-
-		local dir = (position - hrp.Position)
-		local dist = dir.Magnitude
-
-		if dist < 1 then
-			if arrivedTime == 0 then arrivedTime = tick() end
-			if tick() - arrivedTime >= 2 then
-				-- Congela no ar por 6 segundos
-				BodyVelocity.Velocity = Vector3.new(0, 0, 0)
-				task.wait(6)
-				flying = false
-				break
-			end
-		else
-			arrivedTime = 0
-		end
-
-		BodyVelocity.Velocity = dir.Unit * math.clamp(dist * 2.5, 20, 60)
-		BodyGyro.CFrame = CFrame.new(hrp.Position, position)
-	end
-
-	BodyVelocity:Destroy()
-	BodyGyro:Destroy()
-end
-
--- Botão
-Button.MouseButton1Click:Connect(function()
-	local char = Player.Character
-	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
-	if not InitialPos then
-		InitialPos = char.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
-	end
-
-	if not Teleporting then
-		Teleporting = true
-		Button.Text = "Cancel"
-		coroutine.wrap(function()
-			while Teleporting do
-				flyTo(InitialPos)
-			end
-		end)()
-	else
-		Teleporting = false
-		Button.Text = "Steal"
-	end
+btn.MouseButton1Click:Connect(function()
+    if not isStealing then
+        isStealing = true
+        teleportAttempts = 0
+        btn.Text = "Cancel"
+        task.spawn(attemptTeleport)
+    else
+        isStealing = false
+        btn.Text = "Steal"
+    end
 end)
