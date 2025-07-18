@@ -1,178 +1,126 @@
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
+-- ProximityPrompt: torna todos instantâneos
+for _, p in ipairs(game:GetDescendants()) do
+    if p:IsA("ProximityPrompt") then p.HoldDuration = 0 end
+end
+game.DescendantAdded:Connect(function(obj)
+    if obj:IsA("ProximityPrompt") then obj.HoldDuration = 0 end
+end)
 
-local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local hrp = char:WaitForChild("HumanoidRootPart")
+-- GUI
+local StarterGui = game:GetService("StarterGui")
+pcall(function() StarterGui:SetCore("SendNotification",{Title="Teleport System",Text="Carregando Interface...",Duration=3}) end)
 
-local spawnPos = hrp.Position + Vector3.new(0, 10, 0)
+local Player = game.Players.LocalPlayer
+local Mouse = Player:GetMouse()
+local Teleporting = false
+local InitialPos = nil
+local TargetReachedTime = 0
 
-local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-gui.Name = "UltraSmoothFlyGui"
-gui.ResetOnSpawn = false
+-- GUI Criar
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 160, 0, 60)
+Frame.Position = UDim2.new(0.5, -80, 0.85, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.BackgroundTransparency = 0.2
+Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+Frame.Active = true
+Frame.Draggable = true
+Frame.Name = "SmoothTPGui"
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 220, 0, 80)
-frame.Position = UDim2.new(0.5, -110, 0.85, 0)
-frame.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
-frame.BorderSizePixel = 0
-frame.AnchorPoint = Vector2.new(0.5, 0.5)
-frame.ClipsDescendants = true
-frame.BackgroundTransparency = 0.15
+local UICorner = Instance.new("UICorner", Frame)
+UICorner.CornerRadius = UDim.new(0, 10)
 
-local uicorner = Instance.new("UICorner", frame)
-uicorner.CornerRadius = UDim.new(0, 16)
+local Button = Instance.new("TextButton", Frame)
+Button.Size = UDim2.new(1, -10, 1, -10)
+Button.Position = UDim2.new(0, 5, 0, 5)
+Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+Button.TextColor3 = Color3.fromRGB(255,255,255)
+Button.TextScaled = true
+Button.Text = "Steal"
+Button.Font = Enum.Font.GothamBold
 
-local shadow = Instance.new("ImageLabel", frame)
-shadow.Image = "rbxassetid://1316045217"
-shadow.Size = UDim2.new(1, 30, 1, 30)
-shadow.Position = UDim2.new(0.5, -15, 0.5, -15)
-shadow.AnchorPoint = Vector2.new(0.5, 0.5)
-shadow.ImageTransparency = 0.75
-shadow.BackgroundTransparency = 1
-shadow.ZIndex = 0
+Instance.new("UICorner", Button).CornerRadius = UDim.new(0, 8)
 
-local button = Instance.new("TextButton", frame)
-button.Size = UDim2.new(1, 0, 0.6, 0)
-button.BackgroundTransparency = 1
-button.Text = "Steal"
-button.Font = Enum.Font.GothamBold
-button.TextSize = 26
-button.TextColor3 = Color3.new(1, 1, 1)
-button.ZIndex = 2
-button.AutoButtonColor = true
+-- Função de voo suave atravessando tudo
+local function flyTo(position)
+    local char = Player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
-local progressBarBack = Instance.new("Frame", frame)
-progressBarBack.Size = UDim2.new(0.9, 0, 0.25, 0)
-progressBarBack.Position = UDim2.new(0.05, 0, 0.7, 0)
-progressBarBack.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-progressBarBack.BorderSizePixel = 0
-progressBarBack.ZIndex = 2
-progressBarBack.ClipsDescendants = true
-progressBarBack.Visible = false
+    local hrp = char.HumanoidRootPart
+    local flying = true
+    local BodyGyro = Instance.new("BodyGyro", hrp)
+    BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    BodyGyro.P = 100000
+    BodyGyro.CFrame = hrp.CFrame
 
-local progressBar = Instance.new("Frame", progressBarBack)
-progressBar.Size = UDim2.new(0, 0, 1, 0)
-progressBar.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-progressBar.BorderSizePixel = 0
-progressBar.ZIndex = 3
+    local BodyVelocity = Instance.new("BodyVelocity", hrp)
+    BodyVelocity.Velocity = Vector3.zero
+    BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 
-local a0 = Instance.new("Attachment", hrp)
+    local reached = false
+    local arrivedTime = 0
 
-local alignPos = Instance.new("AlignPosition")
-alignPos.Attachment0 = a0
-alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
-alignPos.Responsiveness = 20
-alignPos.MaxForce = 5e5
-alignPos.RigidityEnabled = false
-alignPos.Enabled = false
-alignPos.Parent = hrp
+    while flying and Teleporting do
+        task.wait(0.03)
+        if not char or not char:FindFirstChild("HumanoidRootPart") then break end
 
-local alignOri = Instance.new("AlignOrientation")
-alignOri.Attachment0 = a0
-alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
-alignOri.Responsiveness = 20
-alignOri.MaxTorque = 5e5
-alignOri.RigidityEnabled = false
-alignOri.Enabled = false
-alignOri.Parent = hrp
+        local dir = (position - hrp.Position)
+        local dist = dir.Magnitude
 
-local flying = false
-local cancel = false
+        if dist < 1 then
+            if arrivedTime == 0 then arrivedTime = tick() end
+            if tick() - arrivedTime >= 2 then
+                flying = false
+                break
+            end
+        else
+            arrivedTime = 0
+        end
 
-local function setCanCollide(state)
-	-- Função pra setar CanCollide false em tudo do personagem e acessórios
-	for _, part in pairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = state
-		end
-	end
+        BodyVelocity.Velocity = dir.Unit * math.clamp(dist * 2.5, 20, 100)
+        BodyGyro.CFrame = CFrame.new(hrp.Position, position)
+    end
+
+    BodyVelocity:Destroy()
+    BodyGyro:Destroy()
 end
 
-local function maintainNoclip()
-	-- Loop rápido que mantém CanCollide false enquanto voa
-	return RunService.Heartbeat:Connect(function()
-		if not flying then return end
-		for _, part in pairs(char:GetDescendants()) do
-			if part:IsA("BasePart") and part.CanCollide == true then
-				part.CanCollide = false
-			end
-		end
-	end)
-end
+-- Ação do botão
+Button.MouseButton1Click:Connect(function()
+    if Teleporting then
+        Teleporting = false
+        Button.Text = "Steal"
+        return
+    end
 
-local function tweenProgress(duration)
-	progressBarBack.Visible = true
-	progressBar.Size = UDim2.new(0, 0, 1, 0)
-	
-	local tween = TweenService:Create(progressBar, TweenInfo.new(duration), {Size = UDim2.new(1, 0, 1, 0)})
-	tween:Play()
-	tween.Completed:Wait()
-	
-	progressBarBack.Visible = false
-	progressBar.Size = UDim2.new(0, 0, 1, 0)
-end
+    Teleporting = true
+    Button.Text = "Cancel"
 
-button.MouseButton1Click:Connect(function()
-	if flying then
-		cancel = true
-		button.Text = "Steal"
-		return
-	end
+    if not InitialPos then
+        local char = Player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            InitialPos = char.HumanoidRootPart.Position + Vector3.new(0, 15, 0)
+        end
+    end
 
-	flying = true
-	cancel = false
-	button.Text = "Cancel"
+    task.delay(0.2, function()
+        if InitialPos then
+            flyTo(InitialPos)
 
-	setCanCollide(false)
-	alignPos.Position = spawnPos
-	alignPos.Enabled = true
-	alignOri.Enabled = true
+            -- Congelar no ar por 6 segundos
+            local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local freeze = Instance.new("BodyPosition", hrp)
+                freeze.Position = hrp.Position
+                freeze.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+                task.wait(6)
+                freeze:Destroy()
+            end
 
-	local heartbeatConn = maintainNoclip()
-
-	local arrived = false
-	local timer = 0
-	local lastTick = tick()
-
-	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
-		if cancel then
-			flying = false
-			setCanCollide(true)
-			alignPos.Enabled = false
-			alignOri.Enabled = false
-			heartbeatConn:Disconnect()
-			button.Text = "Steal"
-			progressBarBack.Visible = false
-			return
-		end
-		
-		local dist = (hrp.Position - spawnPos).Magnitude
-		if dist < 3 then
-			timer += tick() - lastTick
-			if timer >= 2 then
-				arrived = true
-				heartbeatConn:Disconnect()
-			end
-		else
-			timer = 0
-		end
-		lastTick = tick()
-	end)
-
-	while not arrived and not cancel do
-		task.wait()
-	end
-
-	if cancel then return end
-
-	alignPos.Position = spawnPos + Vector3.new(0, 0.1, 0)
-	tweenProgress(6)
-
-	setCanCollide(true)
-	alignPos.Enabled = false
-	alignOri.Enabled = false
-	button.Text = "Steal"
-	flying = false
+            Button.Text = "Steal"
+            Teleporting = false
+        end
+    end)
 end)
